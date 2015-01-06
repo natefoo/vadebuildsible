@@ -1,0 +1,49 @@
+---
+
+- name: Build Mailman Package
+  hosts: all
+  vars:
+    mm_version: 2.1.16
+    dch_version: 2.1.16-2ppa1
+    dch_text: Modifications for per-list SpamAssassin settings as well as spam scores for held messages
+    dch_dist: trusty
+    name: Nathan Coraor
+    email: nate@bx.psu.edu
+  tasks:
+    - name: Specify timezone
+      copy: content='America/New_York\n' dest=/etc/timezone
+      sudo: yes
+    - name: Set timezone
+      command: dpkg-reconfigure -fnoninteractive tzdata
+      sudo: yes
+    - name: Install build packages
+      apt: pkg={{ item }}
+      with_items:
+        - devscripts
+        - debhelper
+        - quilt
+      sudo: yes
+    - name: Fetch Mailman source package
+      command: apt-get source mailman creates=~/mailman-{{ mm_version }}
+    - name: Create new quilt patch
+      command: quilt new 99_hold_spam_score.patch chdir=~/mailman-{{ mm_version }}
+          creates=~/mailman-{{ mm_version }}/.pc/99_hold_spam_score.patch
+    - name: Quilt Hold.py patch
+      shell: quilt fold </vagrant/Hold.py.patch chdir=~/mailman-{{ mm_version }}
+          creates=~/mailman-{{ mm_version }}/.pc/99_hold_spam_score.patch/Mailman/Handlers/Hold.py
+    - name: Refresh quilt
+      command: quilt refresh --no-timestamps --no-index chdir=~/mailman-{{ mm_version }}
+          creates=~/mailman-{{ mm_version }}/debian/patches/99_hold_spam_score.patch
+    - name: Copy modified SpamAssassin.py
+      copy: src=SpamAssassin.py dest=~/mailman-{{ mm_version }}/debian/contrib/SpamAssassin.py
+    - name: Set changelog message
+      shell: DEBFULLNAME="{{ name }}" DEBEMAIL={{ email }} dch -v 1:{{ dch_version }} -D {{ dch_dist }} "{{ dch_text }}" && touch ~/mailman_{{ dch_version }}.dch
+          chdir=~/mailman-{{ mm_version }} creates=~/mailman_{{ dch_version }}.dch
+    - name: Build source package
+      command: debuild -S -sd chdir=~/mailman-{{ mm_version }}
+          creates=~/mailman_{{ dch_version }}.debian.tar.gz
+    - name: Upload to PPA
+      command: dput ppa:natefoo/infrastructure mailman_{{ dch_version }}_source.changes
+          creates=~/mailman_{{ dch_version }}_source.ppa.upload
+
+# vim: set filetype=ansible :

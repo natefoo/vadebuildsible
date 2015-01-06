@@ -1,0 +1,30 @@
+---
+
+- name: Initialize box
+  hosts: all
+  vars:
+    pgp_key: 751B835F
+  tasks:
+    - name: Update APT cache
+      apt: update_cache=yes
+      sudo: yes
+    - name: Import PGP key
+      local_action: shell gpg --export-secret-key -a '{{ pgp_key }}' | vagrant ssh -c 'gpg --import'
+    - name: Trust PGP key
+      local_action: shell gpg --export-ownertrust | vagrant ssh -c 'gpg --import-ownertrust'
+    - name: Install gpg-agent packages
+      apt: pkg={{ item }}
+      with_items:
+        - gnupg-agent
+        - pinentry-curses
+      sudo: yes
+    - name: Create gpg-agent.conf
+      copy: content="default-cache-ttl 86400\nmax-cache-ttl 172800\n" dest=~/.gnupg/gpg-agent.conf
+    - name: Start gpg-agent
+      command: gpg-agent --daemon --write-env-file=/home/vagrant/.gnupg/gpg-agent-info
+    - name: Automatically source gpg-agent-info
+      lineinfile: dest=~/.profile line="[ -f $HOME/.gnupg/gpg-agent-info ] && . $HOME/.gnupg/gpg-agent-info ; export GPG_AGENT_INFO"
+    - name: Create foo.gpg
+      shell: echo foo | gpg -e -r {{ pgp_key }} -o foo.pgp
+
+# vim: set filetype=ansible :
