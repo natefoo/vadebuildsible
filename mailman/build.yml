@@ -1,6 +1,6 @@
 ---
 
-- name: Build Mailman Package
+- name: Build mailman package
   hosts: all
   vars:
     mm_version: 2.1.16
@@ -10,19 +10,6 @@
     name: Nathan Coraor
     email: nate@bx.psu.edu
   tasks:
-    - name: Specify timezone
-      copy: content='America/New_York\n' dest=/etc/timezone
-      sudo: yes
-    - name: Set timezone
-      command: dpkg-reconfigure -fnoninteractive tzdata
-      sudo: yes
-    - name: Install build packages
-      apt: pkg={{ item }}
-      with_items:
-        - devscripts
-        - debhelper
-        - quilt
-      sudo: yes
     - name: Fetch Mailman source package
       command: apt-get source mailman creates=~/mailman-{{ mm_version }}
     - name: Create new quilt patch
@@ -37,11 +24,16 @@
     - name: Copy modified SpamAssassin.py
       copy: src=SpamAssassin.py dest=~/mailman-{{ mm_version }}/debian/contrib/SpamAssassin.py
     - name: Set changelog message
-      shell: DEBFULLNAME="{{ name }}" DEBEMAIL={{ email }} dch -v 1:{{ dch_version }} -D {{ dch_dist }} "{{ dch_text }}" && touch ~/mailman_{{ dch_version }}.dch
+      shell: dch -v 1:{{ dch_version }} -D {{ dch_dist }} "{{ dch_text }}" && touch ~/mailman_{{ dch_version }}.dch
           chdir=~/mailman-{{ mm_version }} creates=~/mailman_{{ dch_version }}.dch
+      environment:
+        DEBFULLNAME: "{{ name }}"
+        DEBEMAIL: "{{ email }}"
     - name: Build source package
       command: debuild -S -sd chdir=~/mailman-{{ mm_version }}
-          creates=~/mailman_{{ dch_version }}.debian.tar.gz
+          creates=~/mailman_{{ dch_version }}.dsc.asc
+      environment:
+        GPG_AGENT_INFO: /home/vagrant/.gnupg/S.gpg-agent:1:1
     - name: Upload to PPA
       command: dput ppa:natefoo/infrastructure mailman_{{ dch_version }}_source.changes
           creates=~/mailman_{{ dch_version }}_source.ppa.upload
